@@ -8,14 +8,17 @@ from urllib.parse import urlparse, ParseResult
 from typing import TypeAlias
 from types import ModuleType
 
-import database_operation as ops
+from .database_operation import (
+    DatabaseOperationError,
+    AbstractDatabaseOperation,
+    AbstractStateModifyingDatabaseOperation
+)
+from .utils import package_load_validate
 
-from utils import package_load_validate
 
-
-DbOperationError: TypeAlias = ops.DatabaseOperationError
-DbOperation: TypeAlias = ops.AbstractDatabaseOperation
-StateModifyingDbOperation: TypeAlias = ops.AbstractStateModifyingDatabaseOperation
+DbOperationError: TypeAlias = DatabaseOperationError
+DbOperation: TypeAlias = AbstractDatabaseOperation
+StateModifyingDbOperation: TypeAlias = AbstractStateModifyingDatabaseOperation
 
 
 class ArgumentError(ValueError):
