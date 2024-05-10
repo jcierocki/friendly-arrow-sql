@@ -14,22 +14,33 @@ class AbstractDatabaseOperation(ABC):
         pass
 
 
-class SelectOperation(AbstractDatabaseOperation):
+class AbstractStateModifyingDatabaseOperation(AbstractDatabaseOperation):
+    @abstractmethod
+    def execute_with_cursor(self, cursor: adbc.Cursor) -> None:
+        pass
+
+
+class QueryOnlyOperation(AbstractDatabaseOperation):
     query: str
 
     def __init__(self, query: str):
         self.query = query
 
-    def execute_with_cursor(self, cursor: adbc.Cursor) -> pa.Table:
+    def execute_with_cursor(self, cursor: adbc.Cursor):
         try:
             cursor.execute(self.query)
         except Exception as e:
             raise DatabaseOperationError("Failed to execute query: \n" + self.query) from e
 
+
+class SelectOperation(QueryOnlyOperation):
+    def execute_with_cursor(self, cursor: adbc.Cursor) -> pa.Table:
+        super().execute_with_cursor(cursor)
+
         return cursor.fetch_arrow_table()
 
 
-class BulkInsertOperation(AbstractDatabaseOperation):
+class BulkInsertOperation(AbstractStateModifyingDatabaseOperation):
     table_name: str
     data: pa.Table
     schema: str
