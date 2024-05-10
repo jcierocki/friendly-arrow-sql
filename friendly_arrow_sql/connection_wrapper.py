@@ -16,14 +16,6 @@ DbOperation: TypeAlias = ops.AbstractDatabaseOperation
 StateModifyingDbOperation: TypeAlias = ops.AbstractStateModifyingDatabaseOperation
 
 
-class MissingSchemaError(Exception):
-    pass
-
-
-class SettingSchemaError(NotImplementedError):
-    pass
-
-
 class ArgumentError(ValueError):
     pass
 
@@ -32,8 +24,6 @@ class DatabaseConnection:
     __uri: ParseResult
     __driver: ModuleType
     __conn: adbc.Connection | None
-    database_name: str
-    schema: str | None
 
     def get_uri(self, hide_password: bool = True) -> str:
         uri_raw = self.__uri.geturl()
@@ -41,29 +31,16 @@ class DatabaseConnection:
         if not hide_password:
             return uri_raw
 
+        # TODO rethink, this will fail for SQLite
         return uri_raw.replace(f":{self.__uri.password}@", ":***@")
 
-    def _validate_schema(self, schema: str):
-        with self.__driver.connect(self.__uri.geturl()) as conn:
-            if schema not in conn.adbc_get_objects(depth="db_schemas"):
-                raise MissingSchemaError(f"Database schema '{schema}' does not exist")
-
-    def __init__(self, uri: str, reusable: bool = True, schema: str | None = None):
+    def __init__(self, uri: str, reusable: bool = True):
         self.__uri = urlparse(uri)
         sql_dialect_name = self.__uri.scheme
         adbc_driver_name = f"adbc_driver_{sql_dialect_name}.dbapi"
 
         package_load_validate(adbc_driver_name, "adbc_driver")
         self.__driver = sys.modules["adbc_driver"]
-
-        self.database_name = self.__uri.path.removeprefix('/')
-        if schema is not None:  # makes no impact yet
-            if sql_dialect_name != "postgresql":
-                SettingSchemaError("Setting a default schema for the whole transaction " +
-                                   "is currently supported only for PostgreSQL")
-
-            self._validate_schema(schema)
-            self.schema = schema
 
         if reusable:
             self.__conn = self.__driver.connect(uri, autocommit=False)

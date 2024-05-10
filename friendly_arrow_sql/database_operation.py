@@ -52,6 +52,7 @@ class BulkInsertOperation(AbstractStateModifyingDatabaseOperation):
                  data: pa.Table,
                  schema: str | None = None,
                  mode: Literal['append', 'create', 'create_append', 'replace'] = "append"):
+
         self.table_name = table_name
         self.data = data
         self.schema = schema
