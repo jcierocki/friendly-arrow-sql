@@ -1,9 +1,11 @@
+import sys
+import re
+
 import pyarrow as pa
 import adbc_driver_manager.dbapi as adbc
-import sys
 
 from urllib.parse import urlparse, ParseResult
-from typing import Literal, TypeAlias
+from typing import TypeAlias
 from types import ModuleType
 
 import database_operation as ops
@@ -28,15 +30,21 @@ class DatabaseConnection:
     def get_uri(self, hide_password: bool = True) -> str:
         uri_raw = self.__uri.geturl()
 
-        if not hide_password:
+        if not hide_password or self.__uri.password is None:
+            # the 2nd condition is a workaround for SQLite
             return uri_raw
 
-        # TODO rethink, this will fail for SQLite
         return uri_raw.replace(f":{self.__uri.password}@", ":***@")
 
     def __init__(self, uri: str, reusable: bool = True):
-        self.__uri = urlparse(uri)
-        sql_dialect_name = self.__uri.scheme
+        uri_parsed = urlparse(uri)
+        sql_dialect_name = uri_parsed.scheme
+        if sql_dialect_name == "sqlite":
+            uri = re.sub(r"sqlite:/+", '', uri)
+            self.__uri = urlparse(uri)
+        else:
+            self.__uri = uri_parsed
+
         adbc_driver_name = f"adbc_driver_{sql_dialect_name}.dbapi"
 
         package_load_validate(adbc_driver_name, "adbc_driver")

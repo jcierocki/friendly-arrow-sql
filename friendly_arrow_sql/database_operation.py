@@ -1,3 +1,5 @@
+import warnings
+
 import pyarrow as pa
 import adbc_driver_manager.dbapi as adbc
 
@@ -50,7 +52,7 @@ class BulkInsertOperation(AbstractStateModifyingDatabaseOperation):
     def __init__(self,
                  table_name: str,
                  data: pa.Table,
-                 schema: str | None = None,
+                 schema: str | None = None,  # has no effect for SQLite
                  mode: Literal['append', 'create', 'create_append', 'replace'] = "append"):
 
         self.table_name = table_name
@@ -58,9 +60,21 @@ class BulkInsertOperation(AbstractStateModifyingDatabaseOperation):
         self.schema = schema
         self.mode = mode
 
+    def _reset_schema_sqlite(self, cursor: adbc.Cursor):
+        # this method resets the self.schema if detects that the 'cursor' was created using SQLite connection
+        # (SQLite does not support schemas)
+        if cursor._conn.__class__.__name__ == "AdbcSqliteConnection":
+            self.schema = None
+            warnings.warn("Custom schemas are not supported by SQLite")
+
     def execute_with_cursor(self, cursor: adbc.Cursor) -> None:
+        self._reset_schema_sqlite(cursor)
+
         try:
-            cursor.adbc_ingest(self.table_name, self.data, db_schema_name=self.schema, mode=self.mode)
+            cursor.adbc_ingest(self.table_name,
+                               self.data,
+                               db_schema_name=self.schema,
+                               mode=self.mode)
         except Exception as e:
             schema_prefix = '' if self.schema is None else f"{self.schema}."
             raise DatabaseOperationError(f"Failed to bulk insert data into {schema_prefix}{self.table_name}") from e
