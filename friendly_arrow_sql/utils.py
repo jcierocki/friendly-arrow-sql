@@ -34,4 +34,4 @@ def load_adbc_sql_driver(sql_dialect: str):
         case "flightsql":
             import adbc_driver_flightsql.dbapi as adbc_driver
         case _:
-            raise DriverNotInstalledError(f"Package 'adbc_driver_{sql_dialect}' not installed.")
+            raise ModuleNotInstalledError(f"ADBC driver package 'adbc_driver_{sql_dialect}' not installed.")
