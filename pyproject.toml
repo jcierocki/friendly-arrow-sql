@@ -1,6 +1,6 @@
 [project]
 name = "friendly-arrow-sql"
-version = "0.0.1"
+version = "0.1.0"
 authors = [
   { name="Jakub Cierocki", email="jcierocki@gmail.com" },
 ]
@@ -25,13 +25,9 @@ sqlite = [
 flightsql = [
     "adbc-driver-flightsql~=0.11.0"
 ]
-connectorx = [
-    "connectorx~=0.3.2"
-]
 all = [
     "adbc-driver-sqlite~=0.11.0",
-    "adbc-driver-flightsql~=0.11.0",
-    "connectorx~=0.3.2"
+    "adbc-driver-flightsql~=0.11.0"
 ]
 
 [project.urls]
@@ -45,5 +41,6 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.sdist]
 exclude = [
     ".venv-prod/",
+    ".venv-dev/",
     "*.db"
 ]
