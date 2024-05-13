@@ -139,3 +139,21 @@ class SimpleUpdateOperation(UpdateDeleteOperation):
         
         super().__init__(query_, data_, auto_adjust_dialect)
         self.schema = schema
+
+
+class SimpleDeleteOperation(UpdateDeleteOperation):
+    def __init__(self,
+                 data: pa.Table,
+                 table_name: str,
+                 cols_where: list[str],
+                 schema: str | None = None,
+                 auto_adjust_dialect: bool = True):
+
+        schema_prefix = '' if schema is None else f"{schema}."
+        where_expr = ", ".join([f"{c} = ${i}" for i, c in enumerate(cols_where, start=1)])
+
+        data_ = data.select(cols_where)
+        query_ = f"DELETE FROM {schema_prefix}{table_name} WHERE {where_expr}"
+
+        super().__init__(query_, data_, auto_adjust_dialect)
+        self.schema = schema
