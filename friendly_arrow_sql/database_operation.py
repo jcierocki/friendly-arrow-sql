@@ -48,8 +48,15 @@ class SelectOperation(QueryOnlyOperation):
 class BulkInsertOperation(AbstractStateModifyingDatabaseOperation):
     table_name: str
     data: pa.Table
-    schema: str
+    schema: str | None
     mode: Literal['append', 'create', 'create_append', 'replace']
+
+    def _reset_schema_sqlite(self, cursor: adbc.Cursor):
+        # this method resets the self.schema if detects that the 'cursor' was created using SQLite connection
+        # (SQLite does not support schemas)
+        if cursor._conn.__class__.__name__ == "AdbcSqliteConnection":
+            self.schema = None
+            warnings.warn("Custom schemas are not supported by SQLite")
 
     def __init__(self,
                  table_name: str,
@@ -59,15 +66,8 @@ class BulkInsertOperation(AbstractStateModifyingDatabaseOperation):
 
         self.table_name = table_name
         self.data = data
-        self.schema = schema
         self.mode = mode
-
-    def _reset_schema_sqlite(self, cursor: adbc.Cursor):
-        # this method resets the self.schema if detects that the 'cursor' was created using SQLite connection
-        # (SQLite does not support schemas)
-        if cursor._conn.__class__.__name__ == "AdbcSqliteConnection":
-            self.schema = None
-            warnings.warn("Custom schemas are not supported by SQLite")
+        self.schema = schema
 
     def execute_with_cursor(self, cursor: adbc.Cursor) -> None:
         self._reset_schema_sqlite(cursor)
@@ -87,6 +87,18 @@ class UpdateDeleteOperation(AbstractStateModifyingDatabaseOperation):
     data: pa.Table
     auto_adjust_dialect: bool
 
+    def __init__(self,
+                 query: str,
+                 data: pa.Table,
+                 auto_adjust_dialect: bool = True
+                 # set ^^^ to False if you use Postgres or you manually adjusted the query and the data to
+                 # fit SQLite syntax
+                 ):
+
+        self.query = query
+        self.data = data
+        self.auto_adjust_dialect = auto_adjust_dialect
+
     def _adjust_query_sql_dialect(self, cursor: adbc.Cursor):
         # this method adjusts the query and data column order if detects that the 'cursor' was created using SQLite
         # connection (SQLite requires different placeholder types as well as the data to be initially sorted)
@@ -99,17 +111,6 @@ class UpdateDeleteOperation(AbstractStateModifyingDatabaseOperation):
             self.query = re.sub(r"\$\d", '?', self.query)
             self.data = self.data.select(np.array(self.data.column_names)[column_order])
 
-    def __init__(self,
-                 query: str,
-                 data: pa.Table,
-                 auto_adjust_dialect: bool = True
-                 # set ^^^ to False if you use Postgres or you manually adjusted the query and the data to
-                 # fit SQLite syntax
-                 ):
-        self.query = query
-        self.data = data
-        self.auto_adjust_dialect = auto_adjust_dialect
-
     def execute_with_cursor(self, cursor: adbc.Cursor) -> None:
         if self.auto_adjust_dialect:
             self._adjust_query_sql_dialect(cursor)
@@ -119,3 +120,22 @@ class UpdateDeleteOperation(AbstractStateModifyingDatabaseOperation):
         except Exception as e:
             raise DatabaseOperationError("Failed to execute query: \n" + self.query) from e
 
+
+class SimpleUpdateOperation(UpdateDeleteOperation):
+    def __init__(self,
+                 data: pa.Table,
+                 table_name: str,
+                 cols_values: list[str],
+                 cols_where: list[str],
+                 schema: str | None = None,
+                 auto_adjust_dialect: bool = True):
+
+        schema_prefix = '' if schema is None else f"{schema}."
+        update_expr = ", ".join([f"{c} = ${i}" for i, c in enumerate(cols_values, start=1)])
+        where_expr = ", ".join([f"{c} = ${i}" for i, c in enumerate(cols_where, start=len(cols_values) + 1)])
+
+        data_ = data.select(cols_values + cols_where)
+        query_ = f"UPDATE {schema_prefix}{table_name} SET {update_expr} WHERE {where_expr}"
+        
+        super().__init__(query_, data_, auto_adjust_dialect)
+        self.schema = schema
